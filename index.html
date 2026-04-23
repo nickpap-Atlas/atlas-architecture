@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ATLAS — AI Operating System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #07090A;
+    --green: #00E676;
+    --teal: #26C6DA;
+    --purple: #CE93D8;
+    --blue: #64B5F6;
+    --amber: #FFD54F;
+    --coral: #FF8A65;
+    --text: #E8EAED;
+    --subtext: #7A8085;
+    --card-bg: rgba(255,255,255,0.035);
+    --card-border: rgba(255,255,255,0.07);
+  }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', 'Courier New', monospace;
+    min-height: 100vh;
+    overflow-x: auto;
+  }
+
+  /* Dot-grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: radial-gradient(rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 36px 36px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Ambient glow blobs */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 600px 400px at 50% 45%, rgba(0,230,118,0.04) 0%, transparent 70%),
+      radial-gradient(ellipse 400px 300px at 10% 60%, rgba(38,198,218,0.04) 0%, transparent 70%),
+      radial-gradient(ellipse 400px 300px at 88% 50%, rgba(100,181,246,0.04) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ─── Header ─── */
+  header {
+    text-align: center;
+    padding: 36px 24px 20px;
+    position: relative;
+    z-index: 10;
+  }
+
+  header h1 {
+    font-size: clamp(18px, 3.5vw, 28px);
+    font-weight: 500;
+    color: var(--green);
+    letter-spacing: 0.06em;
+    text-shadow: 0 0 40px rgba(0,230,118,0.5), 0 0 80px rgba(0,230,118,0.2);
+  }
+
+  header p {
+    font-size: 12px;
+    color: var(--subtext);
+    margin-top: 7px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  /* ─── Diagram wrapper ─── */
+  .diagram-wrapper {
+    overflow-x: auto;
+    overflow-y: auto;
+    padding: 16px 24px 80px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ─── Diagram canvas ─── */
+  .diagram {
+    position: relative;
+    width: 1400px;
+    height: 1160px;
+    margin: 0 auto;
+  }
+
+  /* SVG connection layer */
+  #connections {
+    position: absolute;
+    top: 0; left: 0;
+    width: 1400px;
+    height: 1160px;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  /* ─── VPS backdrop ─── */
+  .vps-backdrop {
+    position: absolute;
+    left: 520px;
+    top: 375px;
+    width: 360px;
+    height: 240px;
+    border: 1px solid rgba(100,181,246,0.18);
+    border-radius: 20px;
+    background: rgba(100,181,246,0.025);
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: flex-end;
+    padding: 10px 14px;
+    pointer-events: none;
+  }
+
+  .vps-label {
+    font-size: 10px;
+    color: rgba(100,181,246,0.6);
+    letter-spacing: 0.05em;
+    font-weight: 500;
+  }
+
+  .vps-sub {
+    font-size: 9px;
+    color: rgba(100,181,246,0.35);
+    letter-spacing: 0.04em;
+    margin-top: 2px;
+  }
+
+  /* ─── Nodes ─── */
+  .node {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+    cursor: default;
+    transition: transform 0.22s cubic-bezier(.34,1.56,.64,1), z-index 0s;
+  }
+
+  .node:hover {
+    transform: translate(-50%, -50%) scale(1.08);
+    z-index: 30;
+  }
+
+  .node-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 10px 13px 11px;
+    text-align: center;
+    width: 130px;
+    position: relative;
+    overflow: hidden;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: box-shadow 0.3s ease, border-color 0.3s ease;
+  }
+
+  .node:hover .node-card {
+    border-color: rgba(255,255,255,0.14);
+  }
+
+  /* Coloured top bar */
+  .node-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    border-radius: 12px 12px 0 0;
+  }
+
+  .cat-core    .node-card::before { background: var(--green); }
+  .cat-channel .node-card::before { background: var(--teal); }
+  .cat-dept    .node-card::before { background: var(--purple); }
+  .cat-int     .node-card::before { background: var(--blue); }
+  .cat-auto    .node-card::before { background: var(--amber); }
+  .cat-biz     .node-card::before { background: var(--coral); }
+
+  /* Category hover glows */
+  .cat-core:hover    .node-card { box-shadow: 0 0 20px rgba(0,230,118,0.15); border-color: rgba(0,230,118,0.25); }
+  .cat-channel:hover .node-card { box-shadow: 0 0 20px rgba(38,198,218,0.15); border-color: rgba(38,198,218,0.25); }
+  .cat-dept:hover    .node-card { box-shadow: 0 0 20px rgba(206,147,216,0.15); border-color: rgba(206,147,216,0.25); }
+  .cat-int:hover     .node-card { box-shadow: 0 0 20px rgba(100,181,246,0.15); border-color: rgba(100,181,246,0.25); }
+  .cat-auto:hover    .node-card { box-shadow: 0 0 20px rgba(255,213,79,0.15); border-color: rgba(255,213,79,0.25); }
+  .cat-biz:hover     .node-card { box-shadow: 0 0 20px rgba(255,138,101,0.15); border-color: rgba(255,138,101,0.25); }
+
+  .node-icon {
+    display: block;
+    font-size: 20px;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  .node-label {
+    font-size: 10.5px;
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1.3;
+    letter-spacing: 0.01em;
+  }
+
+  .node-sub {
+    font-size: 8.5px;
+    color: var(--subtext);
+    margin-top: 4px;
+    line-height: 1.35;
+    font-weight: 300;
+  }
+
+  /* ─── ATLAS hub node (special) ─── */
+  .atlas-hub .node-card {
+    width: 154px;
+    padding: 18px 16px 16px;
+    border-color: rgba(0,230,118,0.35);
+    background: rgba(0,230,118,0.06);
+    animation: atlasGlow 3.5s ease-in-out infinite;
+  }
+
+  @keyframes atlasGlow {
+    0%,100% {
+      box-shadow:
+        0 0 25px rgba(0,230,118,0.18),
+        0 0 55px rgba(0,230,118,0.09),
+        inset 0 0 18px rgba(0,230,118,0.05);
+    }
+    50% {
+      box-shadow:
+        0 0 45px rgba(0,230,118,0.35),
+        0 0 90px rgba(0,230,118,0.18),
+        inset 0 0 30px rgba(0,230,118,0.10);
+    }
+  }
+
+  .atlas-hub .node-icon { font-size: 30px; }
+  .atlas-hub .node-label { font-size: 15px; color: var(--green); letter-spacing: 0.05em; }
+  .atlas-hub .node-sub { font-size: 9px; color: rgba(0,230,118,0.55); }
+
+  /* Pulsing ring around ATLAS */
+  .atlas-ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid rgba(0,230,118,0.15);
+    transform: translate(-50%,-50%);
+    pointer-events: none;
+    z-index: 5;
+    animation: ringPulse 3.5s ease-out infinite;
+  }
+
+  @keyframes ringPulse {
+    0% { transform: translate(-50%,-50%) scale(1); opacity: 0.5; }
+    100% { transform: translate(-50%,-50%) scale(1.7); opacity: 0; }
+  }
+
+  /* ─── Legend ─── */
+  .legend {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(7,9,10,0.92);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    z-index: 100;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  .legend h3 {
+    font-size: 9px;
+    color: var(--subtext);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .legend-item:last-child { margin-bottom: 0; }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .legend-label {
+    font-size: 10px;
+    color: var(--text);
+    font-weight: 300;
+  }
+
+  /* ─── Section labels (floating, subtle) ─── */
+  .section-label {
+    position: absolute;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--subtext);
+    opacity: 0.55;
+    pointer-events: none;
+    z-index: 4;
+    font-weight: 300;
+  }
+
+  @media (max-width: 900px) {
+    .legend {
+      position: static;
+      margin: 12px 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+    }
+    .legend h3 { width: 100%; margin-bottom: 4px; }
+    .legend-item { margin-bottom: 0; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ATLAS — AI Operating System</h1>
+  <p>Built for Nick Pap &middot; Sydney</p>
+</header>
+
+<div class="diagram-wrapper">
+  <div class="diagram" id="diagram">
+
+    <svg id="connections" xmlns="http://www.w3.org/2000/svg"></svg>
+
+    <!-- VPS backdrop -->
+    <div class="vps-backdrop">
+      <span class="vps-label">🖥️ DigitalOcean VPS Sydney</span>
+      <span class="vps-sub">24/7 Server &middot; $24/mo &middot; 4GB RAM</span>
+    </div>
+
+    <!-- ATLAS pulsing ring -->
+    <div class="atlas-ring" style="left:700px;top:488px;width:220px;height:220px;"></div>
+
+    <!-- Section labels -->
+    <div class="section-label" style="left:18px;top:310px;">Channels</div>
+    <div class="section-label" style="left:160px;top:32px;">Departments</div>
+    <div class="section-label" style="left:1165px;top:330px;">Integrations</div>
+    <div class="section-label" style="left:80px;top:710px;">Automations</div>
+    <div class="section-label" style="left:90px;top:960px;">Businesses</div>
+
+    <!-- Nodes injected by JS -->
+  </div>
+</div>
+
+<aside class="legend">
+  <h3>Legend</h3>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div><span class="legend-label">Core</span></div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--teal)"></div><span class="legend-label">Channels</span></div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div><span class="legend-label">Departments</span></div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div><span class="legend-label">Integrations</span></div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div><span class="legend-label">Automations</span></div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--coral)"></div><span class="legend-label">Businesses</span></div>
+</aside>
+
+<script>
+/* ── Node definitions ── */
+const NODES = {
+  atlas:      { x: 700,  y: 488,  label: 'ATLAS',              sub: 'AI Orchestrator',                           icon: '⚡', cat: 'core',    xl: true },
+
+  whatsapp:   { x: 105,  y: 390,  label: 'WhatsApp',           sub: 'Primary channel',                           icon: '💬', cat: 'channel' },
+  telegram:   { x: 105,  y: 580,  label: 'Telegram',           sub: 'Secondary channel',                         icon: '✈️', cat: 'channel' },
+
+  cos:        { x: 248,  y: 148,  label: 'Chief of Staff',     sub: 'Scheduling & priorities',                   icon: '📅', cat: 'dept' },
+  cfo:        { x: 415,  y: 90,   label: 'CFO',                sub: 'Finance & cashflow',                        icon: '💰', cat: 'dept' },
+  cto:        { x: 585,  y: 62,   label: 'CTO',                sub: 'Tech & automations',                        icon: '🛠️', cat: 'dept' },
+  cmo:        { x: 760,  y: 65,   label: 'CMO',                sub: 'Marketing & brand',                         icon: '📣', cat: 'dept' },
+  legal:      { x: 928,  y: 98,   label: 'Legal',              sub: 'Contracts & IP',                            icon: '⚖️', cat: 'dept' },
+  bd:         { x: 1065, y: 192,  label: 'BD',                 sub: 'Leads & outreach',                          icon: '🤝', cat: 'dept' },
+  ks:         { x: 1118, y: 345,  label: 'Knowledge Steward',  sub: 'Construction brain',                        icon: '🗄️', cat: 'dept' },
+
+  claude:     { x: 1220, y: 462,  label: 'Anthropic Claude',   sub: 'Sonnet + Opus',                             icon: '🧠', cat: 'int' },
+  gcal:       { x: 1210, y: 582,  label: 'Google Calendar',    sub: 'Live diary data',                           icon: '📆', cat: 'int' },
+  gmail:      { x: 1158, y: 708,  label: 'Gmail',              sub: 'Inbox monitoring',                          icon: '📧', cat: 'int' },
+  gdrive:     { x: 1045, y: 818,  label: 'Google Drive',       sub: 'ATLAS Vault',                               icon: '📁', cat: 'int' },
+  supabase:   { x: 878,  y: 875,  label: 'Supabase',           sub: 'tasks · crm · knowledge · decisions',       icon: '🗃️', cat: 'int' },
+
+  morning:    { x: 155,  y: 762,  label: 'Morning Brief',      sub: '6am daily',                                 icon: '🌅', cat: 'auto' },
+  evening:    { x: 282,  y: 840,  label: 'Evening Close',      sub: '5pm daily',                                 icon: '🌆', cat: 'auto' },
+  sunday:     { x: 415,  y: 895,  label: 'Sunday Review',      sub: 'Weekly',                                    icon: '📊', cat: 'auto' },
+  monthly:    { x: 548,  y: 918,  label: 'Monthly Review',     sub: '1st of month',                              icon: '📈', cat: 'auto' },
+  spend:      { x: 668,  y: 898,  label: 'Spend Tracker',      sub: 'Every 2hrs',                                icon: '💳', cat: 'auto' },
+  inbox:      { x: 770,  y: 852,  label: 'Inbox Processor',    sub: 'Every 15mins',                              icon: '📥', cat: 'auto' },
+
+  theproject: { x: 155,  y: 1022, label: 'The Project',        sub: 'Day job · $60M',                            icon: '🏗️', cat: 'biz' },
+  projectiq:  { x: 320,  y: 1062, label: 'Project IQ',         sub: 'Construction SaaS',                         icon: '📱', cat: 'biz' },
+  pap:        { x: 490,  y: 1078, label: 'Pap Projects',       sub: 'Estimating · Civic Rendering',              icon: '📐', cat: 'biz' },
+  spartan:    { x: 655,  y: 1072, label: 'Spartan Motors',     sub: 'Asset sale in progress',                    icon: '🏎️', cat: 'biz' },
+  dj:         { x: 808,  y: 1050, label: 'Mix Master DJs',     sub: 'Weddings only',                             icon: '🎧', cat: 'biz' },
+  progressiq: { x: 950,  y: 1018, label: 'Progress IQ',        sub: 'Health tracker app',                        icon: '💪', cat: 'biz' },
+  pap_art:    { x: 1090, y: 985,  label: 'PAP Auto Art',       sub: 'Limited edition prints',                    icon: '🎨', cat: 'biz' },
+};
+
+/* ── Edge definitions [from, to, optional: bidirectional] ── */
+const EDGES = [
+  // Channels ↔ ATLAS
+  ['whatsapp', 'atlas', true],
+  ['telegram', 'atlas', true],
+  // ATLAS → Departments
+  ['atlas', 'cos'],
+  ['atlas', 'cfo'],
+  ['atlas', 'cto'],
+  ['atlas', 'cmo'],
+  ['atlas', 'legal'],
+  ['atlas', 'bd'],
+  ['atlas', 'ks'],
+  // Integrations → ATLAS
+  ['claude', 'atlas'],
+  ['gcal', 'atlas'],
+  ['gmail', 'atlas'],
+  ['gdrive', 'atlas', true],
+  ['supabase', 'atlas', true],
+  // ATLAS → Automations
+  ['atlas', 'morning'],
+  ['atlas', 'evening'],
+  ['atlas', 'sunday'],
+  ['atlas', 'monthly'],
+  ['atlas', 'spend'],
+  ['atlas', 'inbox'],
+  // ATLAS → Businesses
+  ['atlas', 'theproject'],
+  ['atlas', 'projectiq'],
+  ['atlas', 'pap'],
+  ['atlas', 'spartan'],
+  ['atlas', 'dj'],
+  ['atlas', 'progressiq'],
+  ['atlas', 'pap_art'],
+];
+
+/* ── Category colours ── */
+const CAT_COLOR = {
+  core:    '#00E676',
+  channel: '#26C6DA',
+  dept:    '#CE93D8',
+  int:     '#64B5F6',
+  auto:    '#FFD54F',
+  biz:     '#FF8A65',
+};
+
+/* ── Render nodes ── */
+function renderNodes() {
+  const diagram = document.getElementById('diagram');
+  Object.entries(NODES).forEach(([id, n]) => {
+    const div = document.createElement('div');
+    div.id = 'node-' + id;
+    div.className = `node cat-${n.cat}${n.xl ? ' atlas-hub' : ''}`;
+    div.style.left = n.x + 'px';
+    div.style.top  = n.y + 'px';
+    div.innerHTML = `
+      <div class="node-card">
+        <span class="node-icon">${n.icon}</span>
+        <div class="node-label">${n.label}</div>
+        ${n.sub ? `<div class="node-sub">${n.sub}</div>` : ''}
+      </div>`;
+    diagram.appendChild(div);
+  });
+}
+
+/* ── Build SVG path between two nodes ── */
+function makePath(x1, y1, x2, y2) {
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  const dx = x2 - x1, dy = y2 - y1;
+  const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+  // Perpendicular offset for gentle curve
+  const perp = Math.min(dist * 0.12, 55);
+  const px = (-dy / dist) * perp;
+  const py = ( dx / dist) * perp;
+  return `M ${x1} ${y1} Q ${mx + px} ${my + py} ${x2} ${y2}`;
+}
+
+/* ── Render edges (SVG) ── */
+function renderEdges() {
+  const svg = document.getElementById('connections');
+  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+  svg.appendChild(defs);
+
+  let pathIdx = 0;
+  const durations = [2.8, 3.2, 3.8, 4.2, 2.5, 3.5, 4.8, 3.0, 2.2, 4.5];
+
+  EDGES.forEach(([fromId, toId, bidir], edgeIdx) => {
+    const from = NODES[fromId];
+    const to   = NODES[toId];
+    const color = CAT_COLOR[to.cat] || CAT_COLOR[from.cat];
+    const pathId = `p${pathIdx++}`;
+    const d = makePath(from.x, from.y, to.x, to.y);
+
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+    /* Static line */
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    line.setAttribute('id', pathId);
+    line.setAttribute('d', d);
+    line.setAttribute('fill', 'none');
+    line.setAttribute('stroke', color);
+    line.setAttribute('stroke-width', '1');
+    line.setAttribute('opacity', '0.18');
+
+    /* Travelling pulse dot */
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('r', '2.5');
+    dot.setAttribute('fill', color);
+    dot.setAttribute('opacity', '0.75');
+
+    const dur = durations[edgeIdx % durations.length] + (Math.random() * 0.8 - 0.4);
+    const begin = (edgeIdx * 0.38 % 4).toFixed(2);
+
+    const anim = document.createElementNS('http://www.w3.org/2000/svg', 'animateMotion');
+    anim.setAttribute('dur', dur.toFixed(1) + 's');
+    anim.setAttribute('repeatCount', 'indefinite');
+    anim.setAttribute('begin', begin + 's');
+    anim.setAttribute('calcMode', 'linear');
+
+    const mpath = document.createElementNS('http://www.w3.org/2000/svg', 'mpath');
+    mpath.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#' + pathId);
+    anim.appendChild(mpath);
+    dot.appendChild(anim);
+
+    g.appendChild(line);
+    g.appendChild(dot);
+
+    /* Bidirectional: second dot going the other way */
+    if (bidir) {
+      const rPathId = `r${pathIdx++}`;
+      const rPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      const rd = makePath(to.x, to.y, from.x, from.y);
+      rPath.setAttribute('id', rPathId);
+      rPath.setAttribute('d', rd);
+      rPath.setAttribute('fill', 'none');
+      rPath.setAttribute('stroke', color);
+      rPath.setAttribute('stroke-width', '0');
+      rPath.setAttribute('opacity', '0');
+
+      const rDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      rDot.setAttribute('r', '2.5');
+      rDot.setAttribute('fill', color);
+      rDot.setAttribute('opacity', '0.5');
+
+      const rColor = CAT_COLOR[from.cat] || color;
+      rDot.setAttribute('fill', rColor);
+
+      const rAnim = document.createElementNS('http://www.w3.org/2000/svg', 'animateMotion');
+      rAnim.setAttribute('dur', (dur * 0.85).toFixed(1) + 's');
+      rAnim.setAttribute('repeatCount', 'indefinite');
+      rAnim.setAttribute('begin', (parseFloat(begin) + 1.4).toFixed(2) + 's');
+      rAnim.setAttribute('calcMode', 'linear');
+
+      const rMpath = document.createElementNS('http://www.w3.org/2000/svg', 'mpath');
+      rMpath.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#' + rPathId);
+      rAnim.appendChild(rMpath);
+      rDot.appendChild(rAnim);
+
+      g.appendChild(rPath);
+      g.appendChild(rDot);
+    }
+
+    svg.appendChild(g);
+  });
+}
+
+/* ── Init ── */
+renderNodes();
+renderEdges();
+
+/* ── Node tooltip on hover (debug helper, kept minimal) ── */
+document.querySelectorAll('.node').forEach(node => {
+  node.addEventListener('mouseenter', () => {
+    node.style.zIndex = 30;
+  });
+  node.addEventListener('mouseleave', () => {
+    node.style.zIndex = 10;
+  });
+});
+</script>
+</body>
+</html>
